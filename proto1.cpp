@@ -10,7 +10,7 @@
 
 int   initial_inv_level, next_event_type,
       end_time, num_policies, initial_seed, initial_num_land, seed, num_land, growing_period, initial_productivity, productivity, buy_price, sell_price,
-	  remove_worm_cost, loosen_soil_cost, land_status;
+	  remove_worm_cost, loosen_soil_cost, remove_worm_productivity, loosen_soil_productivity, land_status;
       
 float sim_time, time_last_event, time_next_event[5], prob_distrib_management[NUM_VALUES_MANAGEMENT],
 		smalls, bigs, initial_money, money;
@@ -46,10 +46,10 @@ int main()  /* Main function. */
 
     /* Read input parameters. */
 
-    fscanf(infile, "%f%d%d%d%d%d%d%d%d%d",
+    fscanf(infile, "%f%d%d%d%d%d%d%d%d%d%d%d",
 			&initial_money, &initial_seed, &initial_num_land, &end_time,
 			&growing_period, &initial_productivity, &buy_price, &sell_price,
-			&remove_worm_cost, &loosen_soil_cost);
+			&remove_worm_cost, &loosen_soil_cost, &remove_worm_productivity, &loosen_soil_productivity);
  
     for (i = 1; i < NUM_VALUES_MANAGEMENT; ++i)
         fscanf(infile, "%f", &prob_distrib_management[i]);
@@ -288,19 +288,19 @@ void management() {
 				break;
 				
 			case 2:											//ran is 1, remove worms
-				productivity +=5;
+				productivity += remove_worm_productivity;
 				money -= remove_worm_cost;
 				printf("sim_time: %f, Remove worms.         money: %f\n", sim_time, money);
 				break;
 				
 			case 3:											//ran is 2, loosen soil
-				productivity +=5;
+				productivity += loosen_soil_productivity;
 				money -= loosen_soil_cost;
 				printf("sim_time: %f, Loosen soil.          money: %f\n", sim_time, money);
 				break;
 				
 			case 4:											//ran is 3, remove worms & loosen soil
-				productivity +=10;
+				productivity += remove_worm_productivity + loosen_soil_productivity;
 				money -= remove_worm_cost + loosen_soil_cost;
 				printf("sim_time: %f, Remove worms and lossen soil.      money: %f\n", sim_time, money);
 				break;
