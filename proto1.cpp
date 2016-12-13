@@ -6,13 +6,24 @@
 #define NUM_VALUES_MANAGEMENT 4
 #define BUSY 1
 #define IDLE 2
+#define VOID_EVENT 0
+#define BUYING_EVENT 1
+#define SOWING_EVENT 2
+#define MANAGEMENT_EVENT 3
+#define HARVEST_EVENT 4
+#define END_EVENT 5
+#define TIME_LIMIT 1.0e+30
+#define NONE_MANAGEMENT 1
+#define REMOVE_WORM 2
+#define LOOSEN_SOIL 3
+#define BOTH_MANAGEMENT 4
 
 
 int   initial_inv_level, next_event_type,
       end_time, num_policies, initial_seed, initial_num_land, seed, num_land, growing_period, initial_productivity, productivity, buy_price, sell_price,
 	  remove_worm_cost, loosen_soil_cost, remove_worm_productivity, loosen_soil_productivity, land_status;
       
-float sim_time, time_last_event, time_next_event[5], prob_distrib_management[NUM_VALUES_MANAGEMENT],
+float sim_time, time_last_event, time_next_event[NUM_EVENTS + 1], prob_distrib_management[NUM_VALUES_MANAGEMENT],
 		smalls, bigs, initial_money, money;
 		
 FILE  *infile, *outfile;
@@ -85,23 +96,23 @@ int main()  /* Main function. */
             
 
             switch (next_event_type) {
-                case 1:
+                case BUYING_EVENT:
                     buying();
                     break;
-                case 2:
+                case SOWING_EVENT:
                     sowing();
                     break;
-                case 3:
+                case MANAGEMENT_EVENT:
                     management();
                     break;
-                case 4:
+                case HARVEST_EVENT:
                     harvest();
                     break;
-                case 5:
+                case END_EVENT:
                 	report();
                 	break;
                 default :
-                	printf("\nnext_event_type has not acceptable value\n");
+                	printf("\nError: next_event_type has not acceptable value\n");
                 	exit(1);
             }
           
@@ -109,7 +120,7 @@ int main()  /* Main function. */
            continue simulating.  Otherwise, end the simulation for the current
            (s,S) pair and go on to the next pair (if any). */
 
-        } while (next_event_type != 5);
+        } while (next_event_type != END_EVENT);
     }
 
     /* End the simulations. */
@@ -142,20 +153,20 @@ void initialize(void)  /* Initialization function. */
     /* Initialize the event list.  Since no order is outstanding, the order-
        arrival event is eliminated from consideration. */
 
-    time_next_event[1] = 0; //buying
-    time_next_event[2] = 1.0e+30; //sowing
-    time_next_event[3] = 1.0e+30; // management
-    time_next_event[4] = 1.0e+30; // harvest
-    time_next_event[5] = end_time; // end simulation
+    time_next_event[BUYING_EVENT] = 0; //buying
+    time_next_event[SOWING_EVENT] = TIME_LIMIT; //sowing
+    time_next_event[MANAGEMENT_EVENT] = TIME_LIMIT; // management
+    time_next_event[HARVEST_EVENT] = TIME_LIMIT; // harvest
+    time_next_event[END_EVENT] = end_time; // end simulation
 }
 
 
 void timing(void)  /* Timing function. */
 {
     int   i;
-    float min_time_next_event = 1.0e+29;
+    float min_time_next_event = TIME_LIMIT / 10;
 
-    next_event_type = 0;
+    next_event_type = VOID_EVENT;
 
     /* Determine the event type of the next event to occur. */
 
@@ -167,7 +178,7 @@ void timing(void)  /* Timing function. */
 
     /* Check to see whether the event list is empty. */
 
-    if (next_event_type == 0) {
+    if (next_event_type == VOID_EVENT) {
 
         /* The event list is empty, so stop the simulation */
 
@@ -231,9 +242,9 @@ void buying(void) {
 //	}
 
 	if (origin_money != money) {
-		time_next_event[2] = sim_time;	
+		time_next_event[SOWING_EVENT] = sim_time;	
 	}
-	time_next_event[1] += 1;
+	time_next_event[BUYING_EVENT] += 1;
 	return;
 }
 
@@ -242,11 +253,11 @@ void sowing() {
 		printf("sim_time: %f, sow 1 seed\n", sim_time);
 		land_status = BUSY;
 		seed -= 1;
-		time_next_event[3] = sim_time;
-		time_next_event[4] = sim_time + growing_period;
+		time_next_event[MANAGEMENT_EVENT] = sim_time;
+		time_next_event[HARVEST_EVENT] = sim_time + growing_period;
 	}
 	
-	time_next_event[2] = 1.0e+30;
+	time_next_event[SOWING_EVENT] = TIME_LIMIT;
 }
 
 void management() {
@@ -283,33 +294,35 @@ void management() {
 //		ran = rand()%4;		//get a random number 0 1 2 3
 		
 		switch(management_type){
-			case 1: 										//ran is 0, nothing
+			case NONE_MANAGEMENT: 										//ran is 0, nothing
 				printf("sim_time: %f, Do nothing.\n", sim_time);
 				break;
 				
-			case 2:											//ran is 1, remove worms
+			case REMOVE_WORM:											//ran is 1, remove worms
 				productivity += remove_worm_productivity;
 				money -= remove_worm_cost;
 				printf("sim_time: %f, Remove worms.         money: %f\n", sim_time, money);
 				break;
 				
-			case 3:											//ran is 2, loosen soil
+			case LOOSEN_SOIL:											//ran is 2, loosen soil
 				productivity += loosen_soil_productivity;
 				money -= loosen_soil_cost;
 				printf("sim_time: %f, Loosen soil.          money: %f\n", sim_time, money);
 				break;
 				
-			case 4:											//ran is 3, remove worms & loosen soil
+			case BOTH_MANAGEMENT:											//ran is 3, remove worms & loosen soil
 				productivity += remove_worm_productivity + loosen_soil_productivity;
 				money -= remove_worm_cost + loosen_soil_cost;
 				printf("sim_time: %f, Remove worms and lossen soil.      money: %f\n", sim_time, money);
 				break;
 				
-			default: printf("Error.\n");	
+			default:
+                printf("Error: Management type is invalid.\n");	
+                exit(1);
 		}
 //	}
 	
-	time_next_event[3] = 1.0e+30;
+	time_next_event[MANAGEMENT_EVENT] = TIME_LIMIT;
 }
 
 void harvest() {
@@ -320,8 +333,8 @@ void harvest() {
 	land_status = IDLE;
 	productivity = initial_productivity;
 	
-	time_next_event[4] = 1.0e+30;
-	time_next_event[2] = sim_time;
+	time_next_event[HARVEST_EVENT] = TIME_LIMIT;
+	time_next_event[SOWING_EVENT] = sim_time;
 }
 
 void report(void)  /* Report generator function. */
