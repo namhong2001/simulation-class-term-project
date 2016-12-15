@@ -1,40 +1,72 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
+#include <queue>
+#include <vector>
 
 #define NUM_EVENTS 5
 #define NUM_VALUES_MANAGEMENT 4
 #define BUSY 1
 #define IDLE 2
-#define VOID_EVENT 0
-#define BUYING_EVENT 1
-#define SOWING_EVENT 2
-#define MANAGEMENT_EVENT 3
-#define HARVEST_EVENT 4
-#define END_EVENT 5
+#define BUYING_EVENT 0
+#define SOWING_EVENT 1
+#define MANAGEMENT_EVENT 2
+#define HARVEST_EVENT 3
+#define END_EVENT 4
 #define TIME_LIMIT 1.0e+30
 #define NONE_MANAGEMENT 1
 #define REMOVE_WORM 2
 #define LOOSEN_SOIL 3
 #define BOTH_MANAGEMENT 4
+#define MAX_FARMLAND 500
+#define MAX_SEED 5000
 
+using namespace std;
 
-int   initial_inv_level, next_event_type,
-      end_time, num_policies, initial_seed, initial_num_land, seed, num_land, growing_period, initial_productivity, productivity, buy_price, sell_price,
-	  remove_worm_cost, loosen_soil_cost, remove_worm_productivity, loosen_soil_productivity, land_status;
+class MyComp {
+public:
+    bool operator() (const pair<float, int> &lhs, const pair<float, int> &rhs) {
+        return lhs.first > rhs.first;
+    }
+};
+
+using event_queue = priority_queue<pair<float, int>, vector<pair<float, int> >, MyComp>;
+struct land_info {
+    int status;
+    int production;
+};
+
+land_info land_infos[MAX_FARMLAND];
+
+int   initial_inv_level, end_time, num_policies, initial_seed, initial_num_land, seed, num_land,
+      growing_period, initial_production, production, buy_price, sell_price,
+	  remove_worm_cost, loosen_soil_cost, remove_worm_production, loosen_soil_production;
       
-float sim_time, time_last_event, time_next_event[NUM_EVENTS + 1], prob_distrib_management[NUM_VALUES_MANAGEMENT],
+float sim_time, time_last_event, prob_distrib_management[NUM_VALUES_MANAGEMENT],
 		smalls, bigs, initial_money, money;
+
+event_queue buying_event_queue;
+event_queue sowing_event_queue;
+event_queue management_event_queue;
+event_queue harvest_event_queue;
+event_queue end_event_queue;
+
+event_queue event_list[NUM_EVENTS] = {
+    buying_event_queue,
+    sowing_event_queue,
+    management_event_queue,
+    harvest_event_queue,
+    end_event_queue
+};
 		
 FILE  *infile, *outfile;
 
 void  initialize(void);
-void  timing(void);
+pair<int,int> timing(void);
 void  buying(void);
-void  sowing();
-void  management();
-void  harvest();
-
+void  sowing(int index);
+void  management(int index);
+void  harvest(int index);
 
 void  report(void);
 void  update_time_avg_stats(void);
@@ -50,7 +82,7 @@ long lcgrandgt (int stream);
 
 int main()  /* Main function. */
 {
- 	int i;
+ 	int i, next_event_type, index;
     /* Open input and output files. */
     infile  = fopen("proto_in.txt",  "r");
     outfile = fopen("proto_out.txt", "w");
@@ -59,8 +91,8 @@ int main()  /* Main function. */
 
     fscanf(infile, "%f%d%d%d%d%d%d%d%d%d%d%d",
 			&initial_money, &initial_seed, &initial_num_land, &end_time,
-			&growing_period, &initial_productivity, &buy_price, &sell_price,
-			&remove_worm_cost, &loosen_soil_cost, &remove_worm_productivity, &loosen_soil_productivity);
+			&growing_period, &initial_production, &buy_price, &sell_price,
+			&remove_worm_cost, &loosen_soil_cost, &remove_worm_production, &loosen_soil_production);
  
     for (i = 1; i < NUM_VALUES_MANAGEMENT; ++i)
         fscanf(infile, "%f", &prob_distrib_management[i]);
@@ -86,7 +118,9 @@ int main()  /* Main function. */
 
             /* Determine the next event. */
 
-            timing();
+            pair<int, int> timing_ret = timing();
+            next_event_type = timing_ret.first;
+            index = timing_ret.second;
 
             /* Update time-average statistical accumulators. */
 
@@ -100,13 +134,13 @@ int main()  /* Main function. */
                     buying();
                     break;
                 case SOWING_EVENT:
-                    sowing();
+                    sowing(index);
                     break;
                 case MANAGEMENT_EVENT:
-                    management();
+                    management(index);
                     break;
                 case HARVEST_EVENT:
-                    harvest();
+                    harvest(index);
                     break;
                 case END_EVENT:
                 	report();
@@ -134,6 +168,7 @@ int main()  /* Main function. */
 
 void initialize(void)  /* Initialization function. */
 {
+    int i;
     /* Initialize the simulation clock. */
 
     sim_time = 0.0;
@@ -143,42 +178,44 @@ void initialize(void)  /* Initialization function. */
     seed = initial_seed;
     money = initial_money;
     num_land = initial_num_land;
-    productivity = initial_productivity;
     
-    land_status = IDLE; 
-    
+    for (i=0; i<MAX_FARMLAND; ++i) {
+        land_infos[i].status = IDLE;
+        land_infos[i].production = initial_production;
+    } 
     
     time_last_event = 0.0;
 
-    /* Initialize the event list.  Since no order is outstanding, the order-
-       arrival event is eliminated from consideration. */
-
-    time_next_event[BUYING_EVENT] = 0; //buying
-    time_next_event[SOWING_EVENT] = TIME_LIMIT; //sowing
-    time_next_event[MANAGEMENT_EVENT] = TIME_LIMIT; // management
-    time_next_event[HARVEST_EVENT] = TIME_LIMIT; // harvest
-    time_next_event[END_EVENT] = end_time; // end simulation
+    event_list[BUYING_EVENT].push(make_pair(0.0, -1)); // -1 means "no index"
+    event_list[END_EVENT].push(make_pair(end_time, -1)); // -1 means "no index" 
 }
 
 
-void timing(void)  /* Timing function. */
+pair<int, int> timing(void)  /* Timing function. */
 {
-    int   i;
+    const int no_event = -1;
+    const int first_event = 0;
+    int event_type;
+    int index;
+    int next_event_type;
     float min_time_next_event = TIME_LIMIT / 10;
 
-    next_event_type = VOID_EVENT;
+    next_event_type = no_event;
 
     /* Determine the event type of the next event to occur. */
 
-    for (i = 1; i <= NUM_EVENTS; ++i)
-        if (time_next_event[i] < min_time_next_event) {
-            min_time_next_event = time_next_event[i];
-            next_event_type     = i;
+    for (event_type = first_event; event_type < NUM_EVENTS; ++event_type) {
+        event_queue cur_queue = event_list[event_type];
+
+        if (!cur_queue.empty() && cur_queue.top().first < min_time_next_event) { 
+            min_time_next_event = cur_queue.top().first;
+            next_event_type     = event_type;
         }
+    }
 
     /* Check to see whether the event list is empty. */
 
-    if (next_event_type == VOID_EVENT) {
+    if (next_event_type == no_event) {
 
         /* The event list is empty, so stop the simulation */
 
@@ -188,7 +225,10 @@ void timing(void)  /* Timing function. */
 
     /* The event list is not empty, so advance the simulation clock. */
 
-    sim_time = min_time_next_event;
+    pair<float, int> next_event = event_list[next_event_type].top(); // pair<float time, int index>
+    event_list[next_event_type].pop();
+    sim_time = next_event.first;
+    return make_pair(next_event_type, next_event.second);
 }
 
 void buying(void) {
@@ -204,8 +244,7 @@ void buying(void) {
 	float policy;		//policy is #ofseeds/#oflands
 //	struct land land[100];		//each seed which has been sowed  on a farmland, is a vegetable
 //	int num_seed = 1;			//initial number of seeds is 1 (this time, consider just one kind of seed, ex.cabbage)
-	int i;
-	float origin_money = money;
+    int index;
 //	for(i=0; i<100; i++) land[i].buy = 0;
 //	land[0].buy = 1;			//initial number of land is one, make land[0] be bought		
 //	int num_land;
@@ -241,26 +280,26 @@ void buying(void) {
 		
 //	}
 
-	if (origin_money != money) {
-		time_next_event[SOWING_EVENT] = sim_time;	
-	}
-	time_next_event[BUYING_EVENT] += 1;
+    for (index=0; index<num_land; ++index) {
+        if (land_infos[index].status == IDLE && seed > 0) {
+            sowing(index);
+        }
+    }
+	event_list[BUYING_EVENT].push(make_pair(sim_time + 1, -1));
 	return;
 }
 
-void sowing() {
-	if (land_status == IDLE) {
+void sowing(int index) {
+	if (land_infos[index].status == IDLE && seed > 0) { // actually this is an duplication
 		printf("sim_time: %f, sow 1 seed\n", sim_time);
-		land_status = BUSY;
+		land_infos[index].status = BUSY;
 		seed -= 1;
-		time_next_event[MANAGEMENT_EVENT] = sim_time;
-		time_next_event[HARVEST_EVENT] = sim_time + growing_period;
-	}
-	
-	time_next_event[SOWING_EVENT] = TIME_LIMIT;
+        management(index);
+		event_list[HARVEST_EVENT].push(make_pair(sim_time + growing_period, index));
+	}	
 }
 
-void management() {
+void management(int index) {
 	
 //	struct land{
 //		int buy;		//0 or 1. Set it to 0 at the begining. If bought, set it to 1. 
@@ -299,19 +338,19 @@ void management() {
 				break;
 				
 			case REMOVE_WORM:											//ran is 1, remove worms
-				productivity += remove_worm_productivity;
+				land_infos[index].production += remove_worm_production;
 				money -= remove_worm_cost;
 				printf("sim_time: %f, Remove worms.         money: %f\n", sim_time, money);
 				break;
 				
 			case LOOSEN_SOIL:											//ran is 2, loosen soil
-				productivity += loosen_soil_productivity;
+				land_infos[index].production += loosen_soil_production;
 				money -= loosen_soil_cost;
 				printf("sim_time: %f, Loosen soil.          money: %f\n", sim_time, money);
 				break;
 				
 			case BOTH_MANAGEMENT:											//ran is 3, remove worms & loosen soil
-				productivity += remove_worm_productivity + loosen_soil_productivity;
+				land_infos[index].production += remove_worm_production + loosen_soil_production;
 				money -= remove_worm_cost + loosen_soil_cost;
 				printf("sim_time: %f, Remove worms and lossen soil.      money: %f\n", sim_time, money);
 				break;
@@ -322,19 +361,20 @@ void management() {
 		}
 //	}
 	
-	time_next_event[MANAGEMENT_EVENT] = TIME_LIMIT;
 }
 
-void harvest() {
-	money += sell_price * productivity;
+void harvest(int index) {
+	money += sell_price * land_infos[index].production;
 	
-	printf("sim_time: %f, harvest. income : %d      money: %f\n", sim_time, sell_price * productivity, money);
+	printf("sim_time: %f, harvest. income : %d      money: %f\n", sim_time, sell_price * production, money);
 	
-	land_status = IDLE;
-	productivity = initial_productivity;
+    // initialize
+	land_infos[index].status = IDLE;
+    land_infos[index].production = initial_production;
 	
-	time_next_event[HARVEST_EVENT] = TIME_LIMIT;
-	time_next_event[SOWING_EVENT] = sim_time;
+    if (seed > 0) {
+        sowing(index);
+    }
 }
 
 void report(void)  /* Report generator function. */
@@ -346,6 +386,10 @@ void report(void)  /* Report generator function. */
             money,
             seed, num_land);
 }
+
+
+
+    
 
 
 
