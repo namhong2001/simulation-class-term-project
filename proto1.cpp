@@ -39,12 +39,13 @@ struct land_info {
 
 land_info land_infos[MAX_FARMLAND];
 
-int   initial_inv_level, end_time, num_policies, initial_seed, initial_num_land, seed, num_land,
-      growing_period, initial_production, production, buy_price, sell_price,
-	  remove_worm_cost, loosen_soil_cost, remove_worm_production, loosen_soil_production;
+int   initial_inv_level, end_time, num_policies, initial_seed, initial_num_land, seed, num_land, land_cost,
+      growing_period, initial_production, production, seed_cost, sell_price,
+	  remove_worm_cost, loosen_soil_cost, remove_worm_production, loosen_soil_production,
+      bigs;
       
 float sim_time, time_last_event, prob_distrib_management[NUM_VALUES_MANAGEMENT],
-		smalls, bigs, initial_money, money;
+		smalls, initial_money, money;
 
 event_queue buying_event_queue;
 event_queue sowing_event_queue;
@@ -70,7 +71,6 @@ void  management(int index);
 void  harvest(int index);
 
 void  report(void);
-void  update_time_avg_stats(void);
 
 float expon(float mean);
 int   random_integer(float prob_distrib []);
@@ -90,9 +90,9 @@ int main()  /* Main function. */
 
     /* Read input parameters. */
 
-    fscanf(infile, "%f%d%d%d%d%d%d%d%d%d%d%d",
+    fscanf(infile, "%f%d%d%d%d%d%d%d%d%d%d%d%d",
 			&initial_money, &initial_seed, &initial_num_land, &end_time,
-			&growing_period, &initial_production, &buy_price, &sell_price,
+			&growing_period, &initial_production, &land_cost, &seed_cost, &sell_price,
 			&remove_worm_cost, &loosen_soil_cost, &remove_worm_production, &loosen_soil_production);
  
     for (i = 1; i < NUM_VALUES_MANAGEMENT; ++i)
@@ -109,7 +109,7 @@ int main()  /* Main function. */
 
         /* Read the inventory policy, and initialize the simulation. */
 
-        fscanf(infile, "%f %f", &smalls, &bigs);
+        fscanf(infile, "%f %d", &smalls, &bigs);
         initialize();
 
         /* Run the simulation until it terminates after an end-simulation event
@@ -125,7 +125,6 @@ int main()  /* Main function. */
 
             /* Update time-average statistical accumulators. */
 
-//            update_time_avg_stats();
 
             /* Invoke the appropriate event function. */
             
@@ -233,53 +232,33 @@ pair<int, int> timing(void)  /* Timing function. */
 }
 
 void buying(void) {
-	
-		
-//	struct land{
-//		int buy;		//0 or 1. Set it to 0 at the begining. If bought, set it to 1. 
-//		int production;
-//		int period;
-//		int unitprice;
-//	};
-//	
 	float policy;		//policy is #ofseeds/#oflands
-//	struct land land[100];		//each seed which has been sowed  on a farmland, is a vegetable
-//	int num_seed = 1;			//initial number of seeds is 1 (this time, consider just one kind of seed, ex.cabbage)
+    float origin_money;
     int index;
-//	for(i=0; i<100; i++) land[i].buy = 0;
-//	land[0].buy = 1;			//initial number of land is one, make land[0] be bought		
-//	int num_land;
-//	int money = 1000;		/*since this test is just about buying, not harvest, so no increase in money. 
-//							That is why I make the initial money large*/
-//	int s = 1;
-//	int S = 1.2;
-	
-//	for(; money>0 ;){		//buying policy
-		
-		//get number of lands
-//		num_land = 0;
-//		for(i=0; i<100; i++){
-//			if (land[i].buy == 1) num_land ++;
-//		}
+
+    while (money > 0 && origin_money != money) {
+        origin_money = money;
 		
 		policy = seed/(float)num_land;
 		
 	
-		if (policy<smalls){
-			int num_buy;		//number of seeds to buy
-			num_buy = (int)bigs*num_land - seed;
+		if (policy < smalls) { 
+            int possible_max = (int)money / seed_cost;
+			int num_buy = bigs*num_land - seed; // number of seeds to buy
+            if (possible_max < num_buy) {
+                num_buy = possible_max;
+            } 
 			seed += num_buy;
-			money -= buy_price*num_buy;
+			money -= seed_cost*num_buy;
 			printf("sim_time: %f, Buy %d seed(s). Current money is %f\n", sim_time, num_buy, money);
 		}
-		// do not buy land for prototype
-//		else{
-//			land[num_land].buy = 1;		//buy one land
-//			money -= 100;
-//			printf("Buy a land. Current money is %d\n", money);
-//		}
-		
-//	}
+        else if (money > land_cost) {
+            money -= land_cost;
+            ++num_land;
+			printf("sim_time: %f, Buy a land. Current money is %f\n", sim_time, money);
+		}
+
+    }
 
     for (index=0; index<num_land; ++index) {
         if (land_infos[index].status == IDLE && seed > 0) {
@@ -301,67 +280,46 @@ void sowing(int index) {
 }
 
 void management(int index) {
-	
-//	struct land{
-//		int buy;		//0 or 1. Set it to 0 at the begining. If bought, set it to 1. 
-//		int production;
-//		int period;
-//		int unitprice;
-//	};
-	
-//	struct land land[100];		//each seed which has been sowed  on a farmland, is a vegetable
-//	int i;
-//	for(i=0; i<100; i++) land[i].buy = 0;		//set land[].buy to 0 at begining.
-	
-//	int money = 100;		//current total money
-//	int ran;		//the random number
-	
-//	srand(time(NULL));		//set the "seed"(seed of Random Number, not related to the Farm)
-	//ran = rand()%4;		//get 0,1,2,3 randomly.  1: nothing   2: worm   3: soil   4: worm and soil 
-	
-	//test statistics input 
-//	for(i=0; i<10; i++){
-//		land[i].buy = 1;
-//		land[i].production = 10;
-//		land[i].period = 5;
-//		land[i].unitprice = 10;
-//	}
-	
-//	for(i=0; land[i].buy==1; i++){
-
-	int management_type = random_integer(prob_distrib_management);
-		
-//		ran = rand()%4;		//get a random number 0 1 2 3
-		
-		switch(management_type){
-			case NONE_MANAGEMENT: 										//ran is 0, nothing
-				printf("sim_time: %f, Do nothing.\n", sim_time);
-				break;
-				
-			case REMOVE_WORM:											//ran is 1, remove worms
-				land_infos[index].production += remove_worm_production;
-				money -= remove_worm_cost;
-				printf("sim_time: %f, Remove worms.         money: %f\n", sim_time, money);
-				break;
-				
-			case LOOSEN_SOIL:											//ran is 2, loosen soil
-				land_infos[index].production += loosen_soil_production;
-				money -= loosen_soil_cost;
-				printf("sim_time: %f, Loosen soil.          money: %f\n", sim_time, money);
-				break;
-				
-			case BOTH_MANAGEMENT:											//ran is 3, remove worms & loosen soil
-				land_infos[index].production += remove_worm_production + loosen_soil_production;
-				money -= remove_worm_cost + loosen_soil_cost;
-				printf("sim_time: %f, Remove worms and lossen soil.      money: %f\n", sim_time, money);
-				break;
-				
-			default:
-                printf("Error: Management type is invalid.\n");	
-                exit(1);
-		}
-//	}
-	
+	int management_type = random_integer(prob_distrib_management);	
+    switch(management_type){
+        case NONE_MANAGEMENT: 										//ran is 0, nothing
+            printf("sim_time: %f, Do nothing.\n", sim_time);
+            break;
+            
+        case REMOVE_WORM:											//ran is 1, remove worms
+            if (money >= remove_worm_cost) {
+                land_infos[index].production += remove_worm_production;
+                money -= remove_worm_cost;
+                printf("sim_time: %f, Remove worms.         money: %f\n", sim_time, money);
+            } else {
+                printf("sim_time: %f, Remove worms failded. money: %f\n", sim_time, money);
+            }
+            break;
+            
+        case LOOSEN_SOIL:											//ran is 2, loosen soil
+            if (money >= loosen_soil_cost) {
+                land_infos[index].production += loosen_soil_production;
+                money -= loosen_soil_cost;
+                printf("sim_time: %f, Loosen soil.          money: %f\n", sim_time, money);
+            } else {
+                printf("sim_time: %f, Loosen soil failed.   money: %f\n", sim_time, money);
+            }
+            break;
+         
+        case BOTH_MANAGEMENT:											//ran is 3, remove worms & loosen soil
+            if (money >= remove_worm_cost + loosen_soil_cost) {
+                land_infos[index].production += remove_worm_production + loosen_soil_production;
+                money -= remove_worm_cost + loosen_soil_cost;
+                printf("sim_time: %f, Remove worms and lossen soil.      money: %f\n", sim_time, money);
+            } else {
+                printf("sim_time: %f, Remove worms and lossen soil failed. money: %f\n", sim_time, money);
+            }
+            break;
+            
+        default:
+            printf("Error: Management type is invalid.\n");	
+            exit(1);
+    }	
 }
 
 void harvest(int index) {
@@ -382,7 +340,7 @@ void report(void)  /* Report generator function. */
 {
     /* Compute and write estimates of desired measures of performance. */
 
-    fprintf(outfile, "(%2.1f, %2.1f)%15.2f%17d%17d\n\n",
+    fprintf(outfile, "(%2.1f, %3d)%15.2f%17d%17d\n\n",
             smalls, bigs,
             money,
             seed, num_land);
