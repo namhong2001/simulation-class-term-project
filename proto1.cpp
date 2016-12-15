@@ -9,11 +9,11 @@
 #define NUM_VALUES_MANAGEMENT 4
 #define BUSY 1
 #define IDLE 2
-#define BUYING_EVENT 0
-#define SOWING_EVENT 1
-#define MANAGEMENT_EVENT 2
-#define HARVEST_EVENT 3
-#define END_EVENT 4
+#define BUYING_EVENT 2
+#define SOWING_EVENT 3
+#define MANAGEMENT_EVENT 4
+#define HARVEST_EVENT 0
+#define END_EVENT 1
 #define TIME_LIMIT 1.0e+30
 #define NONE_MANAGEMENT 1
 #define REMOVE_WORM 2
@@ -40,7 +40,7 @@ struct land_info {
 land_info land_infos[MAX_FARMLAND];
 
 int   initial_inv_level, end_time, num_policies, initial_seed, initial_num_land, seed, num_land, land_cost,
-      growing_period, initial_production, production, seed_cost, sell_price,
+      growing_period, initial_production, seed_cost, sell_price,
 	  remove_worm_cost, loosen_soil_cost, remove_worm_production, loosen_soil_production,
       bigs;
       
@@ -54,11 +54,11 @@ event_queue harvest_event_queue;
 event_queue end_event_queue;
 
 event_queue event_list[NUM_EVENTS] = {
+    harvest_event_queue,
+    end_event_queue,
     buying_event_queue,
     sowing_event_queue,
-    management_event_queue,
-    harvest_event_queue,
-    end_event_queue
+    management_event_queue
 };
 		
 FILE  *infile, *outfile;
@@ -250,7 +250,9 @@ void buying(void) {
             } 
 			seed += num_buy;
 			money -= seed_cost*num_buy;
-			printf("sim_time: %f, Buy %d seed(s). Current money is %f\n", sim_time, num_buy, money);
+            if (num_buy > 0) {
+			    printf("sim_time: %f, Buy %d seed(s). Current money is %f\n", sim_time, num_buy, money);
+            }
 		}
         else if (money > land_cost) {
             money -= land_cost;
@@ -325,7 +327,7 @@ void management(int index) {
 void harvest(int index) {
 	money += sell_price * land_infos[index].production;
 	
-	printf("sim_time: %f, harvest. income : %d      money: %f\n", sim_time, sell_price * production, money);
+	printf("sim_time: %f, harvest. income : %d      money: %f\n", sim_time, sell_price * land_infos[index].production, money);
 	
     // initialize
 	land_infos[index].status = IDLE;
