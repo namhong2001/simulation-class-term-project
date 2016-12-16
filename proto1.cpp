@@ -83,10 +83,10 @@ long lcgrandgt (int stream);
 
 int main()  /* Main function. */
 {
- 	int i, next_event_type, index;
+ 	int i, next_event_type, index, j;
     /* Open input and output files. */
-    infile  = fopen("proto_in.txt",  "r");
-    outfile = fopen("proto_out.txt", "w");
+    infile  = fopen("input.txt",  "r");
+    outfile = fopen("output.txt", "w");
 
     /* Read input parameters. */
 
@@ -109,7 +109,10 @@ int main()  /* Main function. */
 
         /* Read the inventory policy, and initialize the simulation. */
 
-        fscanf(infile, "%f %f", &smalls, &bigs);
+        //fscanf(infile, "%f %f", &smalls, &bigs);
+        fscanf(infile, "%f", &smalls);
+        for (j = 1; j <= 40; j += 3) {
+        bigs = j;
         initialize();
 
         /* Run the simulation until it terminates after an end-simulation event
@@ -155,6 +158,7 @@ int main()  /* Main function. */
            (s,S) pair and go on to the next pair (if any). */
 
         } while (next_event_type != END_EVENT);
+        }
     }
 
     /* End the simulations. */
