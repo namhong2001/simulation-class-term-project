@@ -351,7 +351,7 @@ void report(void)  /* Report generator function. */
 {
     /* Compute and write estimates of desired measures of performance. */
 
-    fprintf(outfile, "(%5.2f, %5.2f)%15.2f%17d%17d%15.2f\n\n",
+    fprintf(outfile, "(%5.2f, %5.2f)%15.2f%17d%17d%15.2f\n",
             smalls, bigs,
             money,
             seed, num_land, total_income);
@@ -388,6 +388,8 @@ int random_integer(float prob_distrib[])  /* Random integer generation
 
     for (i = 1; u > prob_distrib[i]; ++i)
         ;
+
+    //return 2; // use no random
     return i;
 }
 
