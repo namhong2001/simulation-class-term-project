@@ -19,7 +19,7 @@
 #define REMOVE_WORM 2
 #define LOOSEN_SOIL 3
 #define BOTH_MANAGEMENT 4
-#define MAX_FARMLAND 500
+#define MAX_FARMLAND 1000
 #define MAX_SEED 5000
 #define BUYING_INTERVAL 10.0
 
@@ -45,7 +45,7 @@ int   initial_inv_level, end_time, num_policies, initial_seed, initial_num_land,
 	  remove_worm_cost, loosen_soil_cost, remove_worm_production, loosen_soil_production;
       
 float sim_time, time_last_event, prob_distrib_management[NUM_VALUES_MANAGEMENT + 1],
-		smalls, bigs, initial_money, money;
+		smalls, bigs, initial_money, money, total_income;
 
 event_queue buying_event_queue;
 event_queue sowing_event_queue;
@@ -101,7 +101,7 @@ int main()  /* Main function. */
 	fscanf(infile, "%d", &num_policies);
 	
 	
-	fprintf(outfile, "   policy            money           seed             land\n");
+	fprintf(outfile, "   policy            money             seed             land            income\n");
 	
 	
 
@@ -178,6 +178,8 @@ void initialize(void)  /* Initialization function. */
     seed = initial_seed;
     money = initial_money;
     num_land = initial_num_land;
+
+    total_income = 0.0;
     
     for (i=0; i<MAX_FARMLAND; ++i) {
         land_infos[i].status = IDLE;
@@ -255,8 +257,12 @@ void buying(void) {
             }
 		}
         else if (money > land_cost && num_land < MAX_FARMLAND) {
-            money -= land_cost;
-            ++num_land;
+            int num_buy_land = (int)money / land_cost;
+            if (num_buy_land + num_land > MAX_FARMLAND) {
+                num_buy_land = MAX_FARMLAND - num_land;
+            }
+            money -= land_cost * num_buy_land;
+            num_land += num_buy_land;
 			//printf("sim_time: %f, Buy a land. Current money is %f\n", sim_time, money);
 		}
 
@@ -325,7 +331,10 @@ void management(int index) {
 }
 
 void harvest(int index) {
-	money += sell_price * land_infos[index].production;
+    float income = sell_price * land_infos[index].production;
+	money += income;
+    total_income += income; 
+    
 	
 	//printf("sim_time: %f, harvest. income : %d      money: %f\n", sim_time, sell_price * land_infos[index].production, money);
 	
@@ -342,10 +351,10 @@ void report(void)  /* Report generator function. */
 {
     /* Compute and write estimates of desired measures of performance. */
 
-    fprintf(outfile, "(%3f, %3f)%15.2f%17d%17d\n\n",
+    fprintf(outfile, "(%5.2f, %5.2f)%15.2f%17d%17d%15.2f\n\n",
             smalls, bigs,
             money,
-            seed, num_land);
+            seed, num_land, total_income);
 }
 
 
